@@ -1,0 +1,7 @@
+\tests
+\venv
+*.pyc
+__pycache__
+*.pyo
+*.pyd
+*.db
