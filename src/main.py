@@ -1,4 +1,4 @@
-import pygame, random
+import pygame, random, time
 from entities.helicopter import Helicopter
 from entities.parachute import MilitaryMan
 from entities.cannon import Cannon
@@ -20,6 +20,10 @@ pygame.mixer.music.load("assets/bgv.mp3")
 pygame.mixer.music.set_volume(0.5)
 pygame.mixer.music.play(-1)  # Loop indefinitely
 
+blast_sound = pygame.mixer.Sound("assets/blast.mp3")  # or blast.wav if you have that file
+blast_sound.set_volume(0.7)  # adjust volume as needed
+
+
 fire_sound = pygame.mixer.Sound("assets/fire.mp3")
 loose_sound = pygame.mixer.Sound("assets/loose.mp3")
 
@@ -37,7 +41,14 @@ GAME_OVER_LIMIT = 10
 game_over = False
 game_over_sound_played = False
 
-import time
+game_start_time = time.time()
+drop_chance = 0.001  # start very low to slow drops initially
+max_drop_chance = 0.02
+drop_increase_interval = 30  # seconds
+drop_increase_amount = 0.003  # increase this much every interval
+
+
+
 
 def random_green_shade():
     return (random.randint(0, 120), random.randint(100, 200), 0)
@@ -64,6 +75,16 @@ font = pygame.font.SysFont(None, 36)
 running = True
 while running:
     screen.blit(background_img, (0, 0))
+
+    # Calculate elapsed time in seconds since game start
+    elapsed = time.time() - game_start_time
+
+    # Calculate how many 30-second intervals have passed
+    intervals = int(elapsed // drop_increase_interval)
+
+    # Update drop chance accordingly
+    drop_chance = min(0.001 + intervals * drop_increase_amount, max_drop_chance)
+
 
     if game_over:
         final_score_surf = font.render(f"Final Score: {score}", True, (255, 255, 255))
@@ -126,11 +147,22 @@ while running:
     for heli in helicopters[:]:
         heli.move()
         heli.draw(screen)
-        drop = heli.maybe_drop()
+
+        if heli.spawn_cooldown > 0:
+            heli.spawn_cooldown -= 1
+            drop = None
+        else:
+            if random.random() < drop_chance:
+                heli.spawn_cooldown = 80
+                drop = (heli.x + heli.width//2, heli.y + heli.height)
+            else:
+                drop = None
+
         if drop:
             man_color = random_green_shade()
             rope_color = random_rope_shade()
             military_men.append(MilitaryMan(drop[0], drop[1], man_color, rope_color))
+
 
     # Update military men
     for man in military_men[:]:
@@ -159,6 +191,7 @@ while running:
                 bursts.append({'x': heli.x+30, 'y': heli.y+15, 'frames': 12})
                 helicopters.remove(heli)
                 bullets.remove(bullet)
+                blast_sound.play()
                 score += 5
                 break
 
