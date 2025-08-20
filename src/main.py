@@ -1,7 +1,8 @@
 import pygame, random
 from entities.helicopter import Helicopter
 from entities.parachute import MilitaryMan
-
+from entities.cannon import Cannon
+from entities.bullet import Bullet
 
 pygame.init()
 
@@ -11,6 +12,9 @@ game_over_sound.set_volume(0.7)
 pygame.mixer.music.load("assets/bgv.mp3")
 pygame.mixer.music.set_volume(0.5)
 pygame.mixer.music.play(-1)  # Loop indefinitely
+
+cannon = Cannon(400, 550)  # fixed base position (x=400, y=550)
+bullet_speed = 15
 
 import time
 
@@ -43,9 +47,6 @@ military_men = []
 bullets = []
 bursts = []
 
-# For demonstration, basic cannon and bullet spawning:
-cannon_x = 400
-cannon_y = 550
 
 score = 0
 missed = 0
@@ -136,16 +137,23 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
-    # Cannon controls
-    keys = pygame.key.get_pressed()
-    if keys[pygame.K_LEFT]:
-        cannon_x -= 6
-    if keys[pygame.K_RIGHT]:
-        cannon_x += 6
-    if keys[pygame.K_SPACE]:
-        if not bullets or bullets[-1].y < cannon_y - 80:
-            bullets.append(pygame.Rect(cannon_x-4, cannon_y-20, 8, 20))
-            fire_sound.play()
+        # Cannon controls (rotate barrel)
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT] or keys[pygame.K_UP]:
+            cannon.move_left()
+        if keys[pygame.K_RIGHT] or keys[pygame.K_DOWN]:
+            cannon.move_right()
+
+        # Shoot bullet when SPACE pressed, limit firing rate with cooldown
+        if keys[pygame.K_SPACE]:    
+            if not bullets or bullets[-1].y < cannon.y - 80:
+                cx, cy = cannon.get_barrel_center()
+                vx, vy = cannon.get_bullet_velocity(bullet_speed)
+                new_bullet = Bullet(cx, cy, vx, vy, radius=4, color=(255, 0, 0))
+                bullets.append(new_bullet)
+                fire_sound.play()
+
+
 
 
     # Helicopter spawn
@@ -176,12 +184,7 @@ while running:
                 game_over = True
 
 
-    # Bullets
-    for bullet in bullets[:]:
-        bullet.y -= 8
-        pygame.draw.rect(screen, (255, 0, 0), bullet)
-        if bullet.y < -20:
-            bullets.remove(bullet)
+    
 
     # Bursts (timed display)
     for burst in bursts[:]:
@@ -190,28 +193,39 @@ while running:
         if burst['frames'] <= 0:
             bursts.remove(burst)
 
-    # Collisions: bullet vs helicopter/man
+        # Collisions: bullet vs helicopter
     for bullet in bullets[:]:
+        bullet_rect = bullet.get_rect()
         for heli in helicopters[:]:
-            rect = pygame.Rect(heli.x, heli.y, heli.width, heli.height)
-            if bullet.colliderect(rect):
+            heli_rect = pygame.Rect(heli.x, heli.y, heli.width, heli.height)
+            if bullet_rect.colliderect(heli_rect):
                 bursts.append({'x': heli.x+30, 'y': heli.y+15, 'frames': 12})
                 helicopters.remove(heli)
                 bullets.remove(bullet)
-                score += 5  # <-- Add 5 for helicopter
+                score += 5
                 break
-        for bullet in bullets[:]:
-            for man in military_men[:]:
-                rect = pygame.Rect(man.x-8, man.y-8, 16, 16)
-                if bullet.colliderect(rect):
-                    bursts.append({'x': man.x, 'y': man.y, 'frames': 12})
-                    military_men.remove(man)
-                    bullets.remove(bullet)
-                    score += 1  # <-- Add 1 for military man
-                    break
+
+    # Collisions: bullet vs military men
+    for bullet in bullets[:]:
+        bullet_rect = bullet.get_rect()
+        for man in military_men[:]:
+            man_rect = pygame.Rect(man.x-8, man.y-8, 16, 16)
+            if bullet_rect.colliderect(man_rect):
+                bursts.append({'x': man.x, 'y': man.y, 'frames': 12})
+                military_men.remove(man)
+                bullets.remove(bullet)
+                score += 1
+                break
 
 
-    draw_cannon(screen, cannon_x, cannon_y)
+    for bullet in bullets[:]:
+        bullet.update()
+        pygame.draw.circle(screen, bullet.color, bullet.get_pos(), bullet.radius)
+        if bullet.is_offscreen(800, 600):
+            bullets.remove(bullet)
+
+
+    cannon.draw(screen)
     # Draw the score and missed counter at the top
     font = pygame.font.SysFont(None, 36)
     score_surf = font.render(f"Score: {score}", True, (255, 255, 255))
